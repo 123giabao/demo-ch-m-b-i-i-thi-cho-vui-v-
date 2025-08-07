@@ -485,7 +485,6 @@ def create_pythontutor_url(code, raw_inputs=None):
     
     encoded_code = urllib.parse.quote(code)
     
-    # Handle raw inputs
     raw_input_json = json.dumps(raw_inputs) if raw_inputs else "[]"
     encoded_raw_input = urllib.parse.quote(raw_input_json)
     
@@ -531,11 +530,11 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**✅ Expected Output:**")
+        st.markdown("**✅ Output:**")
         st.code(expected_output)
     
     with col2:
-        st.markdown("**🎯 Actual Output:**")
+        st.markdown("**🎯 Output:**")
         if is_correct:
             st.code(actual_output)
         else:
@@ -544,8 +543,8 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
     # So sánh
     if not is_correct:
         st.markdown("**🔍 So sánh:**")
-        st.markdown(f"- **Expected:** `{expected_output}`")
-        st.markdown(f"- **Actual:** `{actual_output}`")
+        st.markdown(f"- **kết quả:** `{expected_output}`")
+        st.markdown(f"- **kết quả:** `{actual_output}`")
         
         # Phân tích sự khác biệt
         expected_str = str(expected_output)
@@ -555,9 +554,9 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
             expected_num = int(expected_str)
             actual_num = int(actual_str)
             if actual_num > expected_num:
-                st.warning("⚠️ Kết quả lớn hơn expected - có thể có lỗi logic")
+                st.warning("⚠️ Kết quả lớn hơn - có thể có lỗi logic")
             elif actual_num < expected_num:
-                st.warning("⚠️ Kết quả nhỏ hơn expected - có thể thiếu tính toán")
+                st.warning("⚠️ Kết quả nhỏ hơn - có thể thiếu tính toán")
         elif expected_str != actual_str:
             st.warning("⚠️ Kết quả không khớp - kiểm tra lại logic")
     
