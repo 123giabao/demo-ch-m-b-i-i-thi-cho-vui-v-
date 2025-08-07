@@ -331,6 +331,142 @@ def show_leaderboard_page():
         st.session_state.show_leaderboard = False
         st.rerun()
 
+def show_submission_history_page():
+    st.title("📋 Lịch sử nộp bài")
+    
+    try:
+        submissions_df = pd.read_excel('submissions.xlsx', engine='openpyxl') if os.path.exists('submissions.xlsx') else pd.DataFrame()
+        users_df = pd.read_excel('users.xlsx', engine='openpyxl')
+        problems_df = pd.read_excel('problems.xlsx', engine='openpyxl')
+        
+        if len(submissions_df) == 0:
+            st.info("📝 Chưa có bài nộp nào!")
+            if st.button("← Quay lại"):
+                st.session_state.show_submission_history = False
+                st.rerun()
+            return
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("📝 Tổng bài nộp", len(submissions_df))
+        with col2:
+            ac_count = len(submissions_df[submissions_df['status'] == 'AC'])
+            st.metric("✅ Bài đúng", ac_count)
+        with col3:
+            wa_count = len(submissions_df[submissions_df['status'] == 'WA'])
+            st.metric("❌ Bài sai", wa_count)
+        with col4:
+            if len(submissions_df) > 0:
+                success_rate = (ac_count / len(submissions_df)) * 100
+                st.metric("📊 Tỷ lệ đúng", f"{success_rate:.1f}%")
+            else:
+                st.metric("📊 Tỷ lệ đúng", "0%")
+        
+        # Bộ lọc
+        st.markdown("### 🔍 Bộ lọc")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Lọc theo user
+            all_users = users_df['full_name'].tolist()
+            selected_user = st.selectbox("Chọn học sinh:", ["Tất cả"] + all_users)
+        
+        with col2:
+            all_problems = [f"{p['id']}. {p['title']}" for p in problems_df.to_dict('records')]
+            selected_problem = st.selectbox("Chọn bài tập:", ["Tất cả"] + all_problems)
+        
+        with col3:
+            status_options = ["Tất cả", "AC", "WA"]
+            selected_status = st.selectbox("Chọn trạng thái:", status_options)
+        
+        filtered_df = submissions_df.copy()
+        
+        if selected_user != "Tất cả" and 'username' in filtered_df.columns:
+            user_username = users_df[users_df['full_name'] == selected_user]['username'].iloc[0]
+            filtered_df = filtered_df[filtered_df['username'] == user_username]
+        elif selected_user != "Tất cả":
+            st.warning("⚠️ Không thể lọc theo học sinh vì submissions không có thông tin username.")
+            filtered_df = pd.DataFrame() 
+        
+        if selected_problem != "Tất cả":
+            problem_id = int(selected_problem.split('.')[0])
+            filtered_df = filtered_df[filtered_df['problem_id'] == problem_id]
+        
+        if selected_status != "Tất cả":
+            filtered_df = filtered_df[filtered_df['status'] == selected_status]
+        
+        st.markdown("### 📊 Danh sách bài nộp")
+        
+        if len(filtered_df) > 0:
+            display_df = filtered_df.copy()
+            
+            # Thêm thông tin user
+            if 'username' in display_df.columns:
+                display_df = display_df.merge(users_df[['username', 'full_name']], on='username', how='left')
+                display_df = display_df[['timestamp', 'full_name', 'problem_id', 'status', 'code', 'analysis']]
+                display_df.columns = ['Thời gian', 'Học sinh', 'Bài tập', 'Trạng thái', 'Code', 'Phân tích']
+            else:
+                display_df = display_df[['timestamp', 'problem_id', 'status', 'code', 'analysis']]
+                display_df.columns = ['Thời gian', 'Bài tập', 'Trạng thái', 'Code', 'Phân tích']
+            
+            st.dataframe(display_df, use_container_width=True)
+            
+            st.markdown("### 🔍 Chi tiết bài nộp")
+            
+            for idx, row in filtered_df.iterrows():
+                with st.expander(f"📝 {row['timestamp']} - Bài {row['problem_id']} - {row['status']}"):
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        st.markdown("**📋 Thông tin:**")
+                        st.markdown(f"- **Thời gian:** {row['timestamp']}")
+                        st.markdown(f"- **Bài tập:** {row['problem_id']}")
+                        st.markdown(f"- **Trạng thái:** {row['status']}")
+                        
+                        if 'username' in row and row['username'] in users_df['username'].values:
+                            user_info = users_df[users_df['username'] == row['username']].iloc[0]
+                            st.markdown(f"- **Học sinh:** {user_info['full_name']}")
+                    
+                    with col2:
+                        st.markdown("**📊 Điểm số:**")
+                        if row['status'] == 'AC':
+                            st.success("✅ 10/10 điểm")
+                        else:
+                            st.error("❌ 0/10 điểm")
+                    
+                    st.markdown("**💻 Code:**")
+                    st.code(row['code'], language='python')
+                    
+                    if pd.notna(row['analysis']) and row['analysis']:
+                        st.markdown("**🤖 Phân tích AI:**")
+                        st.markdown(row['analysis'])
+                    
+                    if pd.notna(row['test_results']) and row['test_results']:
+                        st.markdown("**🧪 Kết quả test:**")
+                        try:
+                            test_results = json.loads(row['test_results'])
+                            if isinstance(test_results, list):
+                                for i, test in enumerate(test_results, 1):
+                                    if test.get('is_correct'):
+                                        st.success(f"✅ Test {i}: PASSED")
+                                    else:
+                                        st.error(f"❌ Test {i}: FAILED")
+                                        st.markdown(f"**Input:** `{test.get('input', 'N/A')}`")
+                                        st.markdown(f"**Expected:** `{test.get('expected', 'N/A')}`")
+                                        st.markdown(f"**Actual:** `{test.get('actual', 'N/A')}`")
+                        except:
+                            st.info("Không thể hiển thị chi tiết test cases")
+        else:
+            st.info("📝 Không có bài nộp nào phù hợp với bộ lọc!")
+        
+    except Exception as e:
+        st.error(f"❌ Lỗi khi tải lịch sử nộp bài: {str(e)}")
+    
+    if st.button("← Quay lại"):
+        st.session_state.show_submission_history = False
+        st.rerun()
+
 def load_problems_from_excel():
     try:
         if os.path.exists('problems.xlsx'):
@@ -485,6 +621,7 @@ def create_pythontutor_url(code, raw_inputs=None):
     
     encoded_code = urllib.parse.quote(code)
     
+    
     raw_input_json = json.dumps(raw_inputs) if raw_inputs else "[]"
     encoded_raw_input = urllib.parse.quote(raw_input_json)
     
@@ -530,11 +667,11 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**✅ Output:**")
+        st.markdown("**✅ Expected Output:**")
         st.code(expected_output)
     
     with col2:
-        st.markdown("**🎯 Output:**")
+        st.markdown("**🎯 Actual Output:**")
         if is_correct:
             st.code(actual_output)
         else:
@@ -543,8 +680,8 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
     # So sánh
     if not is_correct:
         st.markdown("**🔍 So sánh:**")
-        st.markdown(f"- **kết quả:** `{expected_output}`")
-        st.markdown(f"- **kết quả:** `{actual_output}`")
+        st.markdown(f"- **Expected:** `{expected_output}`")
+        st.markdown(f"- **Actual:** `{actual_output}`")
         
         # Phân tích sự khác biệt
         expected_str = str(expected_output)
@@ -554,9 +691,9 @@ def display_test_case_detail(input_data, expected_output, actual_output, is_corr
             expected_num = int(expected_str)
             actual_num = int(actual_str)
             if actual_num > expected_num:
-                st.warning("⚠️ Kết quả lớn hơn - có thể có lỗi logic")
+                st.warning("⚠️ Kết quả lớn hơn expected - có thể có lỗi logic")
             elif actual_num < expected_num:
-                st.warning("⚠️ Kết quả nhỏ hơn - có thể thiếu tính toán")
+                st.warning("⚠️ Kết quả nhỏ hơn expected - có thể thiếu tính toán")
         elif expected_str != actual_str:
             st.warning("⚠️ Kết quả không khớp - kiểm tra lại logic")
     
@@ -582,6 +719,8 @@ def main():
         st.session_state.test_results = []
     if 'ai_analysis_pending' not in st.session_state:
         st.session_state.ai_analysis_pending = False
+    if 'show_submission_history' not in st.session_state:
+        st.session_state.show_submission_history = False
     
     # p kết n
     if not st.session_state.logged_in:
@@ -590,10 +729,10 @@ def main():
     
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
-        st.title("DEMO WEB CHẤM BÀI")
+        st.title("WEB CHẤM BÀI")
     with col2:
         st.markdown(f"**👤 {st.session_state.user['full_name']}**")
-        st.markdown(f"**🎭 {st.session_state.user['role'].title()}**")
+        st.markdown(f"**{st.session_state.user['role'].title()}**")
     with col3:
         if st.button("🚪 Đăng xuất"):
             st.session_state.logged_in = False
@@ -603,7 +742,7 @@ def main():
     problems = load_problems_from_excel()
     
     with st.sidebar:
-        st.header("🌿 DEMO WEB CHẤM BÀI")
+        st.header("🌿WEB CHẤM BÀI")
         
         # Phân quyền theo
         user_role = st.session_state.user['role']
@@ -650,6 +789,9 @@ def main():
             
             if st.button("🏆 Bảng xếp hạng"):
                 st.session_state.show_leaderboard = True
+            
+            if st.button("📋 Lịch sử nộp bài"):
+                st.session_state.show_submission_history = True
     
 
     if hasattr(st.session_state, 'show_stats') and st.session_state.show_stats:
@@ -662,6 +804,10 @@ def main():
     
     if hasattr(st.session_state, 'show_leaderboard') and st.session_state.show_leaderboard:
         show_leaderboard_page()
+        return
+    
+    if hasattr(st.session_state, 'show_submission_history') and st.session_state.show_submission_history:
+        show_submission_history_page()
         return
     
     if st.session_state.selected_problem:
